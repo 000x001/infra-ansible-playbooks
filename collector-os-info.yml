@@ -1,0 +1,42 @@
+---
+- name: Collect OS and user info from all VMs
+  hosts: all
+  gather_facts: yes
+  tasks:
+    - name: Get bash users from /etc/passwd
+      shell: "grep '/bin/bash' /etc/passwd | cut -d: -f1"
+      register: users_cmd
+
+    - name: Parse users into list
+      set_fact:
+        users_list: "{{ users_cmd.stdout_lines }}"
+
+    - name: Build host info
+      set_fact:
+        host_info:
+          inventory_hostname: "{{ inventory_hostname }}"
+          hostname: "{{ ansible_hostname }}"
+          os_name: "{{ ansible_distribution }}"
+          os_version: "{{ ansible_distribution_version }}"
+          kernel: "{{ ansible_kernel }}"
+          users: "{{ users_list }}"
+
+    - name: Display host info
+      debug:
+        var: host_info
+
+- name: Save to file
+  hosts: localhost
+  tasks:
+    - name: Aggregate all host data
+      set_fact:
+        all_hosts: "{{ groups['all'] | map('extract', hostvars, 'host_info') | list }}"
+
+    - name: Save JSON to file
+      copy:
+        content: "{{ all_hosts | to_json(indent=2) }}"
+        dest: "./vm_info.json"
+
+    - name: Display success message
+      debug:
+        msg: "VM info saved to vm_info.json with {{ all_hosts | length }} hosts"
